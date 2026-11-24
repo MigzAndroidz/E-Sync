@@ -8,6 +8,7 @@ export interface User {
   id: string;
   firstName: string;
   lastName: string;
+  studentNumber?: string;
   email: string;
   password?: string;
   role: UserRole;
@@ -17,14 +18,15 @@ export interface User {
 export type SafeUser = Omit<User, 'password'>;
 
 export interface LoginCredentials {
-  email: string;
-  password: string;
-  rememberMe?: boolean;
+  identifier: string; // Email or Student Number (20-xxxx)
+  password: string; // Password or Birthdate PIN (MM/DD/YYYY)
+  role?: UserRole;
 }
 
 export interface RegisterUserData {
   firstName: string;
   lastName: string;
+  studentNumber?: string;
   email: string;
   password?: string;
   role?: UserRole;
@@ -43,31 +45,29 @@ export interface AuthResponse {
 export class AuthService {
   private readonly USERS_STORAGE_KEY = 'esync_users';
   private readonly SESSION_KEY = 'esync_session';
-  private readonly REMEMBERED_EMAIL_KEY = 'esync_remembered_email';
 
   private currentUserSubject = new BehaviorSubject<SafeUser | null>(this.getStoredSession());
   public currentUser$ = this.currentUserSubject.asObservable();
 
   constructor() {
-    this.seedDefaultUsers();
+    this.seedDefaultAccounts();
   }
 
   /**
-   * Seed default Admin and Student accounts if esync_users is uninitialized
+   * Pre-seed default Admin and Student credentials for instant testing
    */
-  private seedDefaultUsers(): void {
+  private seedDefaultAccounts(): void {
     try {
       const existing = localStorage.getItem(this.USERS_STORAGE_KEY);
       let users: User[] = existing ? JSON.parse(existing) : [];
 
-      // Check if admin account exists
+      // 1. Seed Admin account (admin@vits.edu.ph / admin123)
       const hasAdmin = users.some(
         (u) => u.email.toLowerCase() === 'admin@vits.edu.ph'
       );
-
       if (!hasAdmin) {
-        const defaultAdmin: User = {
-          id: 'esync_admin_001',
+        const adminUser: User = {
+          id: 'esync_adm_001',
           firstName: 'VITS Admin',
           lastName: 'Officer',
           email: 'admin@vits.edu.ph',
@@ -75,25 +75,27 @@ export class AuthService {
           role: 'admin',
           createdAt: new Date().toISOString()
         };
-        users.unshift(defaultAdmin);
+        users.unshift(adminUser);
       }
 
-      // Check if demo student exists
-      const hasStudent = users.some(
-        (u) => u.email.toLowerCase() === 'student@vits.edu.ph'
+      // 2. Seed Sample Student account (20-1234 / 01/01/2005 or student123)
+      const hasSampleStudent = users.some(
+        (u) =>
+          u.studentNumber === '20-1234' ||
+          u.email.toLowerCase() === 'student@vits.edu.ph'
       );
-
-      if (!hasStudent) {
-        const defaultStudent: User = {
-          id: 'esync_student_002',
+      if (!hasSampleStudent) {
+        const studentUser: User = {
+          id: 'esync_stu_001',
           firstName: 'Juan',
           lastName: 'Dela Cruz',
+          studentNumber: '20-1234',
           email: 'student@vits.edu.ph',
-          password: 'student123',
+          password: '01/01/2005',
           role: 'student',
           createdAt: new Date().toISOString()
         };
-        users.push(defaultStudent);
+        users.push(studentUser);
       }
 
       localStorage.setItem(this.USERS_STORAGE_KEY, JSON.stringify(users));
@@ -126,19 +128,16 @@ export class AuthService {
   }
 
   /**
-   * Helper to check active session from either localStorage or sessionStorage
+   * Helper to retrieve active session from localStorage or sessionStorage
    */
   private getStoredSession(): SafeUser | null {
     try {
-      // Check sessionStorage first, then localStorage
-      const sessionRaw = sessionStorage.getItem(this.SESSION_KEY);
-      if (sessionRaw) {
-        return JSON.parse(sessionRaw);
-      }
       const localRaw = localStorage.getItem(this.SESSION_KEY);
-      if (localRaw) {
-        return JSON.parse(localRaw);
-      }
+      if (localRaw) return JSON.parse(localRaw);
+
+      const sessionRaw = sessionStorage.getItem(this.SESSION_KEY);
+      if (sessionRaw) return JSON.parse(sessionRaw);
+
       return null;
     } catch {
       return null;
@@ -146,22 +145,82 @@ export class AuthService {
   }
 
   /**
-   * Public registration: Defaults to 'student' role
-   * Returns RxJS Observable with 1500ms simulated network delay
+   * Authenticate user credentials with 1200ms simulated network latency
+   */
+  login(credentials: LoginCredentials): Observable<AuthResponse> {
+    return of(null).pipe(
+      delay(1200),
+      switchMap(() => {
+        const users = this.getStoredUsers();
+        const normId = (credentials.identifier || '').trim().toLowerCase();
+        const normPw = (credentials.password || '').trim();
+        const requiredRole = credentials.role || 'student';
+
+        // Match user by identifier (email OR studentNumber) and role
+        const matched = users.find((u) => {
+          if (u.role !== requiredRole) return false;
+
+          const emailMatch = u.email.toLowerCase() === normId;
+          const studentNumberMatch = u.studentNumber
+            ? u.studentNumber.toLowerCase() === normId
+            : false;
+
+          if (!emailMatch && !studentNumberMatch) return false;
+
+          // Password / PIN verification (also permits 'student123' as alias for sample student)
+          const passMatch =
+            u.password === normPw ||
+            (u.studentNumber === '20-1234' && normPw === 'student123');
+
+          return passMatch;
+        });
+
+        if (!matched) {
+          const roleLabel = requiredRole === 'admin' ? 'Admin' : 'Student';
+          return throwError(
+            () =>
+              new Error(
+                `Invalid ${roleLabel} credentials. Please verify your ${
+                  requiredRole === 'admin'
+                    ? 'email and password'
+                    : 'Student ID/Email and password/birthdate'
+                } and try again.`
+              )
+          );
+        }
+
+        const { password: _, ...safeUser } = matched;
+
+        // Persist active session
+        localStorage.setItem(this.SESSION_KEY, JSON.stringify(safeUser));
+        this.currentUserSubject.next(safeUser);
+
+        return of({
+          success: true,
+          message: `Welcome back, ${safeUser.firstName}! Logging into ${safeUser.role.toUpperCase()} portal...`,
+          user: safeUser,
+          token: 'esync_jwt_' + btoa(safeUser.email + ':' + Date.now())
+        });
+      })
+    );
+  }
+
+  /**
+   * Register a new participant (role: 'student') with 1200ms simulated network latency
    */
   register(userData: RegisterUserData): Observable<AuthResponse> {
     return of(null).pipe(
-      delay(1500),
+      delay(1200),
       switchMap(() => {
         const users = this.getStoredUsers();
-        const normalizedEmail = (userData.email || '').trim().toLowerCase();
+        const normEmail = (userData.email || '').trim().toLowerCase();
+        const normStudentNum = (userData.studentNumber || '').trim().toLowerCase();
 
-        // Enforce duplicate email restriction
-        const exists = users.some(
-          (u) => u.email.trim().toLowerCase() === normalizedEmail
+        // 1. Duplicate email check
+        const emailExists = users.some(
+          (u) => u.email.toLowerCase() === normEmail
         );
-
-        if (exists) {
+        if (emailExists) {
           return throwError(
             () =>
               new Error(
@@ -170,13 +229,29 @@ export class AuthService {
           );
         }
 
+        // 2. Duplicate student number check
+        if (normStudentNum) {
+          const studentNumExists = users.some(
+            (u) => u.studentNumber && u.studentNumber.toLowerCase() === normStudentNum
+          );
+          if (studentNumExists) {
+            return throwError(
+              () =>
+                new Error(
+                  `Student Number ${userData.studentNumber} is already registered for ITlympics.`
+                )
+            );
+          }
+        }
+
         const newUser: User = {
           id: 'esync_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
           firstName: userData.firstName.trim(),
           lastName: userData.lastName.trim(),
-          email: normalizedEmail,
+          studentNumber: userData.studentNumber?.trim(),
+          email: normEmail,
           password: userData.password,
-          role: userData.role || 'student', // Assign 'student' role by default
+          role: userData.role || 'student',
           createdAt: new Date().toISOString()
         };
 
@@ -187,7 +262,7 @@ export class AuthService {
 
         return of({
           success: true,
-          message: `Account created successfully! Welcome to E-Sync, ${safeUser.firstName}.`,
+          message: `Registration successful! Welcome to E-Sync, ${safeUser.firstName}.`,
           user: safeUser,
           token: 'esync_jwt_' + btoa(newUser.email + ':' + Date.now())
         });
@@ -196,59 +271,7 @@ export class AuthService {
   }
 
   /**
-   * Login: Authenticates credentials and stores session based on Remember Me
-   * Returns RxJS Observable with 1500ms simulated network delay
-   */
-  login(credentials: LoginCredentials): Observable<AuthResponse> {
-    return of(null).pipe(
-      delay(1500),
-      switchMap(() => {
-        const users = this.getStoredUsers();
-        const normalizedEmail = (credentials.email || '').trim().toLowerCase();
-        const enteredPassword = credentials.password;
-
-        const matchedUser = users.find(
-          (u) =>
-            u.email.trim().toLowerCase() === normalizedEmail &&
-            u.password === enteredPassword
-        );
-
-        if (!matchedUser) {
-          return throwError(
-            () =>
-              new Error(
-                'Invalid email or password. Please verify your credentials and try again.'
-              )
-          );
-        }
-
-        const { password: _, ...safeUser } = matchedUser;
-
-        // Session storage strategy based on Remember Me
-        if (credentials.rememberMe) {
-          localStorage.setItem(this.SESSION_KEY, JSON.stringify(safeUser));
-          localStorage.setItem(this.REMEMBERED_EMAIL_KEY, normalizedEmail);
-          sessionStorage.removeItem(this.SESSION_KEY);
-        } else {
-          sessionStorage.setItem(this.SESSION_KEY, JSON.stringify(safeUser));
-          localStorage.removeItem(this.SESSION_KEY);
-          localStorage.removeItem(this.REMEMBERED_EMAIL_KEY);
-        }
-
-        this.currentUserSubject.next(safeUser);
-
-        return of({
-          success: true,
-          message: `Welcome back, ${safeUser.firstName}! Signing into your ${safeUser.role.toUpperCase()} portal...`,
-          user: safeUser,
-          token: 'esync_jwt_' + btoa(safeUser.email + ':' + Date.now())
-        });
-      })
-    );
-  }
-
-  /**
-   * Logout with simulated observable delay
+   * Log out active session
    */
   logout(): Observable<{ success: boolean; message: string }> {
     return of(null).pipe(
@@ -263,62 +286,50 @@ export class AuthService {
         this.currentUserSubject.next(null);
         return of({
           success: true,
-          message: 'You have been logged out of E-Sync.'
+          message: 'You have signed out of E-Sync.'
         });
       })
     );
   }
 
   /**
-   * Returns the current authenticated user as an Observable
+   * Get current authenticated user
    */
   getCurrentUser(): Observable<SafeUser | null> {
     return of(this.currentUserSubject.value);
   }
 
-  /**
-   * Synchronous getter for current user
-   */
   get currentUserValue(): SafeUser | null {
     return this.currentUserSubject.value;
   }
 
   /**
-   * Check remembered email
+   * Password recovery simulation
    */
-  getRememberedEmail(): string {
-    try {
-      return localStorage.getItem(this.REMEMBERED_EMAIL_KEY) || '';
-    } catch {
-      return '';
-    }
-  }
-
-  /**
-   * Password reset simulation
-   */
-  resetPassword(email: string): Observable<{ success: boolean; message: string }> {
+  resetPassword(identifier: string): Observable<{ success: boolean; message: string }> {
     return of(null).pipe(
-      delay(1200),
+      delay(1000),
       switchMap(() => {
-        const normalizedEmail = (email || '').trim().toLowerCase();
+        const norm = (identifier || '').trim().toLowerCase();
         const users = this.getStoredUsers();
-        const userExists = users.some(
-          (u) => u.email.trim().toLowerCase() === normalizedEmail
+        const user = users.find(
+          (u) =>
+            u.email.toLowerCase() === norm ||
+            (u.studentNumber && u.studentNumber.toLowerCase() === norm)
         );
 
-        if (!userExists) {
+        if (!user) {
           return throwError(
             () =>
               new Error(
-                'No registered account found with this email in E-Sync.'
+                'No registered account found with that Student ID or Email.'
               )
           );
         }
 
         return of({
           success: true,
-          message: `Password reset instructions sent to ${normalizedEmail}.`
+          message: `Password reset instructions sent to registered address for ${user.firstName}.`
         });
       })
     );

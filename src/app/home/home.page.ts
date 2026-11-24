@@ -9,13 +9,8 @@ import {
 } from '@angular/forms';
 import {
   IonContent,
-  IonButton,
   IonIcon,
   IonInput,
-  IonCheckbox,
-  IonSegment,
-  IonSegmentButton,
-  IonLabel,
   IonSpinner,
   LoadingController,
   ToastController
@@ -24,20 +19,19 @@ import { addIcons } from 'ionicons';
 import {
   eyeOutline,
   eyeOffOutline,
-  mailOutline,
-  lockClosedOutline,
   personOutline,
+  lockClosedOutline,
+  mailOutline,
+  cardOutline,
+  schoolOutline,
+  shieldCheckmarkOutline,
+  arrowBackOutline,
   logInOutline,
   personAddOutline,
-  checkmarkCircleOutline,
-  alertCircleOutline,
-  arrowForwardOutline,
-  logOutOutline,
-  shieldCheckmarkOutline,
-  keyOutline,
-  schoolOutline
+  sparklesOutline,
+  logOutOutline
 } from 'ionicons/icons';
-import { AuthService, SafeUser } from '../services/auth';
+import { AuthService, SafeUser, UserRole } from '../services/auth';
 
 @Component({
   selector: 'app-home',
@@ -48,18 +42,14 @@ import { AuthService, SafeUser } from '../services/auth';
     CommonModule,
     ReactiveFormsModule,
     IonContent,
-    IonButton,
     IonIcon,
     IonInput,
-    IonCheckbox,
-    IonSegment,
-    IonSegmentButton,
-    IonLabel,
     IonSpinner
   ]
 })
 export class HomePage implements OnInit {
-  activeSegment: 'login' | 'signup' = 'login';
+  selectedRole: UserRole = 'student';
+  authMode: 'login' | 'register' = 'login';
 
   loginForm!: FormGroup;
   signUpForm!: FormGroup;
@@ -83,105 +73,75 @@ export class HomePage implements OnInit {
     addIcons({
       eyeOutline,
       eyeOffOutline,
-      mailOutline,
-      lockClosedOutline,
       personOutline,
+      lockClosedOutline,
+      mailOutline,
+      cardOutline,
+      schoolOutline,
+      shieldCheckmarkOutline,
+      arrowBackOutline,
       logInOutline,
       personAddOutline,
-      checkmarkCircleOutline,
-      alertCircleOutline,
-      arrowForwardOutline,
-      logOutOutline,
-      shieldCheckmarkOutline,
-      keyOutline,
-      schoolOutline
+      sparklesOutline,
+      logOutOutline
     });
   }
 
   ngOnInit(): void {
     this.initForms();
-    this.checkRememberedEmail();
-    this.subscribeToCurrentUser();
+    this.subscribeToSession();
   }
 
-  /**
-   * Initialize Reactive Forms with strict validations
-   */
   private initForms(): void {
     this.loginForm = this.fb.group({
-      email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(6)]],
-      rememberMe: [false]
+      identifier: ['', [Validators.required]],
+      password: ['', [Validators.required, Validators.minLength(6)]]
     });
 
     this.signUpForm = this.fb.group({
       firstName: ['', [Validators.required, Validators.minLength(2)]],
       lastName: ['', [Validators.required, Validators.minLength(2)]],
+      studentNumber: ['', [Validators.required]],
       email: ['', [Validators.required, Validators.email]],
       password: ['', [Validators.required, Validators.minLength(6)]]
     });
   }
 
-  /**
-   * Prefill remembered email if available
-   */
-  private checkRememberedEmail(): void {
-    const rememberedEmail = this.authService.getRememberedEmail();
-    if (rememberedEmail) {
-      this.loginForm.patchValue({
-        email: rememberedEmail,
-        rememberMe: true
-      });
-    }
-  }
-
-  /**
-   * Track session changes
-   */
-  private subscribeToCurrentUser(): void {
+  private subscribeToSession(): void {
     this.authService.currentUser$.subscribe((user) => {
       this.currentUser = user;
     });
   }
 
   /**
-   * Handle segment switch between 'login' and 'signup'
+   * Toggle between Student and Admin roles
    */
-  onSegmentChange(event: any): void {
-    const nextSegment = event.detail?.value || event.target?.value;
-    if (nextSegment === 'login' || nextSegment === 'signup') {
-      this.activeSegment = nextSegment;
-      this.loginSubmitted = false;
-      this.signUpSubmitted = false;
-    }
+  setRole(role: UserRole): void {
+    if (this.selectedRole === role) return;
+    this.selectedRole = role;
+    this.authMode = 'login'; // Admin only has login
+    this.loginSubmitted = false;
+    this.signUpSubmitted = false;
+    this.loginForm.reset();
   }
 
   /**
-   * Switch active segment programmatically
+   * Switch between Login and Registration views
    */
-  switchSegment(segment: 'login' | 'signup'): void {
-    this.activeSegment = segment;
+  setAuthMode(mode: 'login' | 'register'): void {
+    this.authMode = mode;
     this.loginSubmitted = false;
     this.signUpSubmitted = false;
   }
 
-  /**
-   * Toggle password input visibility in Login form
-   */
   toggleLoginPassword(): void {
     this.showLoginPassword = !this.showLoginPassword;
   }
 
-  /**
-   * Toggle password input visibility in Sign Up form
-   */
   toggleSignUpPassword(): void {
     this.showSignUpPassword = !this.showSignUpPassword;
   }
 
-  /**
-   * Helper to evaluate field error display
-   */
   isFieldInvalid(form: FormGroup, fieldName: string, isSubmitted: boolean): boolean {
     const control = form.get(fieldName);
     if (!control) return false;
@@ -189,154 +149,152 @@ export class HomePage implements OnInit {
   }
 
   /**
-   * Authenticate user & route based on role ('admin' -> /admin-dashboard, 'student' -> /student-dashboard)
+   * Authenticate and navigate according to role
    */
   async onLogin(): Promise<void> {
     this.loginSubmitted = true;
 
     if (this.loginForm.invalid) {
       this.loginForm.markAllAsTouched();
-      await this.showWarningToast('Please complete all required fields correctly.');
+      await this.showWarningToast(
+        this.selectedRole === 'admin'
+          ? 'Please enter valid admin credentials.'
+          : 'Please enter your Student ID / Email and password.'
+      );
       return;
     }
 
-    const { email, password, rememberMe } = this.loginForm.value;
+    const { identifier, password } = this.loginForm.value;
 
     const loading = await this.loadingCtrl.create({
-      message: 'Authenticating with E-Sync...',
+      message:
+        this.selectedRole === 'admin'
+          ? 'Verifying VITS Administrator access...'
+          : 'Verifying ITlympics Student credentials...',
       spinner: 'crescent'
     });
     await loading.present();
     this.isLoading = true;
 
-    this.authService.login({ email, password, rememberMe }).subscribe({
-      next: async (res) => {
-        this.isLoading = false;
-        await loading.dismiss();
-        await this.showSuccessToast(res.message);
+    this.authService
+      .login({ identifier, password, role: this.selectedRole })
+      .subscribe({
+        next: async (res) => {
+          this.isLoading = false;
+          await loading.dismiss();
+          await this.showSuccessToast(res.message);
 
-        this.loginSubmitted = false;
+          this.loginSubmitted = false;
+          this.loginForm.reset();
 
-        // Post-Login Role-Based Routing
-        if (res.user.role === 'admin') {
-          await this.router.navigate(['/admin-dashboard']);
-        } else {
-          await this.router.navigate(['/student-dashboard']);
+          // Role-based routing redirect
+          if (res.user.role === 'admin') {
+            await this.router.navigate(['/admin-dashboard']);
+          } else {
+            await this.router.navigate(['/student-dashboard']);
+          }
+        },
+        error: async (err) => {
+          this.isLoading = false;
+          await loading.dismiss();
+          await this.showErrorToast(
+            err.message || 'Authentication failed. Please check credentials.'
+          );
         }
-      },
-      error: async (err) => {
-        this.isLoading = false;
-        await loading.dismiss();
-        await this.showErrorToast(err.message || 'Login failed. Please try again.');
-      }
-    });
+      });
   }
 
   /**
-   * Register new user (assigns 'student' role by default)
+   * Register new student participant
    */
   async onSignUp(): Promise<void> {
     this.signUpSubmitted = true;
 
     if (this.signUpForm.invalid) {
       this.signUpForm.markAllAsTouched();
-      await this.showWarningToast('Please fill in valid details to register for ITlympics.');
+      await this.showWarningToast('Please complete all fields with valid information.');
       return;
     }
 
-    const { firstName, lastName, email, password } = this.signUpForm.value;
+    const { firstName, lastName, studentNumber, email, password } =
+      this.signUpForm.value;
 
     const loading = await this.loadingCtrl.create({
-      message: 'Submitting ITlympics registration to E-Sync...',
+      message: 'Registering participant for ITlympics...',
       spinner: 'crescent'
     });
     await loading.present();
     this.isLoading = true;
 
-    this.authService.register({ firstName, lastName, email, password, role: 'student' }).subscribe({
-      next: async (res) => {
-        this.isLoading = false;
-        await loading.dismiss();
-        await this.showSuccessToast(res.message);
+    this.authService
+      .register({
+        firstName,
+        lastName,
+        studentNumber,
+        email,
+        password,
+        role: 'student'
+      })
+      .subscribe({
+        next: async (res) => {
+          this.isLoading = false;
+          await loading.dismiss();
+          await this.showSuccessToast(res.message);
 
-        // Prepopulate login form and switch to login view
-        this.signUpForm.reset();
-        this.signUpSubmitted = false;
-        this.loginForm.patchValue({ email });
-        this.activeSegment = 'login';
-      },
-      error: async (err) => {
-        this.isLoading = false;
-        await loading.dismiss();
-        await this.showErrorToast(err.message || 'Registration failed. Please try again.');
-      }
-    });
-  }
-
-  /**
-   * Trigger forgot password flow
-   */
-  async onForgotPassword(): Promise<void> {
-    const email = this.loginForm.get('email')?.value?.trim();
-
-    if (!email) {
-      await this.showWarningToast(
-        'Please enter your registered email in the email field first.'
-      );
-      this.loginForm.get('email')?.markAsTouched();
-      return;
-    }
-
-    if (this.loginForm.get('email')?.invalid) {
-      await this.showWarningToast('Please enter a valid email address.');
-      this.loginForm.get('email')?.markAsTouched();
-      return;
-    }
-
-    const loading = await this.loadingCtrl.create({
-      message: 'Processing password recovery...',
-      spinner: 'crescent'
-    });
-    await loading.present();
-
-    this.authService.resetPassword(email).subscribe({
-      next: async (res) => {
-        await loading.dismiss();
-        await this.showSuccessToast(res.message);
-      },
-      error: async (err) => {
-        await loading.dismiss();
-        await this.showErrorToast(err.message || 'Unable to process reset request.');
-      }
-    });
-  }
-
-  /**
-   * Helper to quickly populate testing accounts
-   */
-  fillTestingCredentials(role: 'admin' | 'student'): void {
-    if (role === 'admin') {
-      this.loginForm.patchValue({
-        email: 'admin@vits.edu.ph',
-        password: 'admin123',
-        rememberMe: true
+          // Reset and prefill login
+          this.signUpForm.reset();
+          this.signUpSubmitted = false;
+          this.loginForm.patchValue({ identifier: studentNumber || email });
+          this.authMode = 'login';
+          this.selectedRole = 'student';
+        },
+        error: async (err) => {
+          this.isLoading = false;
+          await loading.dismiss();
+          await this.showErrorToast(
+            err.message || 'Registration failed. Please try again.'
+          );
+        }
       });
-      this.showSuccessToast('Prefilled VITS Admin credentials (admin@vits.edu.ph)');
-    } else {
-      this.loginForm.patchValue({
-        email: 'student@vits.edu.ph',
-        password: 'student123',
-        rememberMe: true
-      });
-      this.showSuccessToast('Prefilled Student credentials (student@vits.edu.ph)');
-    }
-    this.activeSegment = 'login';
   }
 
   /**
-   * Navigate directly to user's dashboard if session is already active
+   * 1-Click quick fill helpers for testing
    */
-  navigateToActiveDashboard(): void {
+  fillSampleStudent(): void {
+    this.selectedRole = 'student';
+    this.authMode = 'login';
+    this.loginForm.patchValue({
+      identifier: '20-1234',
+      password: '01/01/2005'
+    });
+    this.showSuccessToast('Prefilled Student: 20-1234 / 01/01/2005');
+  }
+
+  fillSampleAdmin(): void {
+    this.selectedRole = 'admin';
+    this.authMode = 'login';
+    this.loginForm.patchValue({
+      identifier: 'admin@vits.edu.ph',
+      password: 'admin123'
+    });
+    this.showSuccessToast('Prefilled Admin: admin@vits.edu.ph / admin123');
+  }
+
+  onLogoError(event: any): void {
+    const target = event.target as HTMLImageElement;
+    if (target) {
+      target.src = 'assets/logo.png';
+    }
+  }
+
+  async onLogout(): Promise<void> {
+    this.authService.logout().subscribe(async (res) => {
+      await this.showWarningToast(res.message);
+    });
+  }
+
+  goToDashboard(): void {
     if (this.currentUser?.role === 'admin') {
       this.router.navigate(['/admin-dashboard']);
     } else {
@@ -344,28 +302,6 @@ export class HomePage implements OnInit {
     }
   }
 
-  /**
-   * Sign out active session
-   */
-  async onLogout(): Promise<void> {
-    this.authService.logout().subscribe(async (res) => {
-      await this.showWarningToast(res.message);
-    });
-  }
-
-  /**
-   * Fallback for logo
-   */
-  handleLogoError(event: any): void {
-    const target = event.target as HTMLImageElement;
-    if (target) {
-      target.src = 'assets/logo.png';
-    }
-  }
-
-  /**
-   * Centralized Toast Controller (Position: top, Duration: 2500ms)
-   */
   private async showToast(
     message: string,
     color: 'success' | 'warning' | 'danger'
@@ -375,26 +311,20 @@ export class HomePage implements OnInit {
       duration: 2500,
       position: 'top',
       color,
-      cssClass: 'esync-toast',
-      buttons: [
-        {
-          text: '✕',
-          role: 'cancel'
-        }
-      ]
+      buttons: [{ text: '✕', role: 'cancel' }]
     });
     await toast.present();
   }
 
-  async showSuccessToast(message: string): Promise<void> {
-    return this.showToast(message, 'success');
+  async showSuccessToast(msg: string): Promise<void> {
+    return this.showToast(msg, 'success');
   }
 
-  async showWarningToast(message: string): Promise<void> {
-    return this.showToast(message, 'warning');
+  async showWarningToast(msg: string): Promise<void> {
+    return this.showToast(msg, 'warning');
   }
 
-  async showErrorToast(message: string): Promise<void> {
-    return this.showToast(message, 'danger');
+  async showErrorToast(msg: string): Promise<void> {
+    return this.showToast(msg, 'danger');
   }
 }

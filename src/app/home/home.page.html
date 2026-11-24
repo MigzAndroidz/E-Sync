@@ -1,332 +1,302 @@
-<ion-content [fullscreen]="true" class="auth-content">
+<ion-content [fullscreen]="true" class="esync-canvas">
   <div class="auth-wrapper">
-    <div class="auth-container">
-      
-      <!-- Header Section -->
-      <header class="auth-header">
-        <div class="logo-frame">
-          <img
-            src="assets/logo.jpg"
-            alt="Valenzuela Information Technology Society Logo"
-            class="brand-logo"
-            (error)="handleLogoError($event)" />
-        </div>
-        <h1 class="brand-title">E-Sync</h1>
-        <p class="brand-subtitle">ITlympics Official Registration • VITS</p>
-      </header>
 
-      <!-- Active User Session Card (If Already Logged In) -->
-      <div *ngIf="currentUser" class="session-card">
-        <div class="session-badge" [class.admin-badge]="currentUser.role === 'admin'">
-          <ion-icon [name]="currentUser.role === 'admin' ? 'shield-checkmark-outline' : 'school-outline'"></ion-icon>
-          <span>Active {{ currentUser.role | uppercase }} Session</span>
-        </div>
-        <h2 class="session-user">{{ currentUser.firstName }} {{ currentUser.lastName }}</h2>
-        <p class="session-email">{{ currentUser.email }}</p>
-        
-        <div class="session-actions">
-          <ion-button
-            expand="block"
-            class="continue-dash-btn"
-            (click)="navigateToActiveDashboard()">
-            <ion-icon slot="end" name="arrow-forward-outline"></ion-icon>
-            Continue to {{ currentUser.role === 'admin' ? 'Admin Portal' : 'Student Portal' }}
-          </ion-button>
-          <ion-button
-            expand="block"
-            fill="clear"
-            class="logout-inline-btn"
-            (click)="onLogout()">
-            <ion-icon slot="start" name="log-out-outline"></ion-icon>
-            Sign Out
-          </ion-button>
-        </div>
+    <!-- Top Header (Above the Glass Card) -->
+    <header class="header-section">
+      <div class="logo-badge">
+        <img
+          src="assets/logo.jpg"
+          alt="Valenzuela Information Technology Society Logo"
+          class="logo-img"
+          (error)="onLogoError($event)" />
+      </div>
+      <h1 class="brand-title">E-Sync</h1>
+      <p class="brand-subtitle">ITlympics Official Registration • VITS</p>
+    </header>
+
+    <!-- Active Session Resume Banner (If Already Logged In) -->
+    <div *ngIf="currentUser" class="active-session-banner">
+      <span class="session-label">
+        <ion-icon name="shield-checkmark-outline"></ion-icon>
+        Logged in as {{ currentUser.firstName }} ({{ currentUser.role | uppercase }})
+      </span>
+      <div class="session-btn-row">
+        <button type="button" class="resume-pill" (click)="goToDashboard()">
+          Go to Dashboard &rarr;
+        </button>
+        <button type="button" class="signout-link" (click)="onLogout()">
+          Sign Out
+        </button>
+      </div>
+    </div>
+
+    <!-- Frosted Glass Card -->
+    <div class="glass-card">
+
+      <!-- Role Toggle Pill (Student | Admin) -->
+      <div class="role-track" *ngIf="authMode === 'login'">
+        <button
+          type="button"
+          class="role-btn"
+          [class.active]="selectedRole === 'student'"
+          (click)="setRole('student')">
+          Student
+        </button>
+        <button
+          type="button"
+          class="role-btn"
+          [class.active]="selectedRole === 'admin'"
+          (click)="setRole('admin')">
+          Admin
+        </button>
       </div>
 
-      <!-- Segment Toggle (Sign In / Sign Up) -->
-      <ion-segment
-        [value]="activeSegment"
-        (ionChange)="onSegmentChange($event)"
-        class="auth-segment"
-        mode="ios">
-        <ion-segment-button value="login">
-          <ion-label>Sign In</ion-label>
-        </ion-segment-button>
-        <ion-segment-button value="signup">
-          <ion-label>Register</ion-label>
-        </ion-segment-button>
-      </ion-segment>
-
-      <!-- LOGIN VIEW -->
-      <div *ngIf="activeSegment === 'login'" class="form-view login-view">
-        <form [formGroup]="loginForm" (ngSubmit)="onLogin()" novalidate>
-
-          <!-- Email Field -->
-          <div class="form-group">
-            <label class="form-label" for="login-email">Email Address</label>
-            <div
-              class="input-surface"
-              [class.has-error]="isFieldInvalid(loginForm, 'email', loginSubmitted)">
-              <ion-icon name="mail-outline" class="input-icon" aria-hidden="true"></ion-icon>
-              <ion-input
-                id="login-email"
-                type="email"
-                formControlName="email"
-                placeholder="participant@vits.edu.ph"
-                autocomplete="email"
-                class="standalone-input">
-              </ion-input>
-            </div>
-            <!-- Validation Error Spans (No ion-text) -->
-            <span
-              class="validation-error"
-              *ngIf="isFieldInvalid(loginForm, 'email', loginSubmitted)">
-              <span *ngIf="loginForm.get('email')?.hasError('required')">Email is required.</span>
-              <span *ngIf="loginForm.get('email')?.hasError('email')">Please enter a valid email address.</span>
-            </span>
-          </div>
-
-          <!-- Password Field -->
-          <div class="form-group">
-            <label class="form-label" for="login-password">Password</label>
-            <div
-              class="input-surface"
-              [class.has-error]="isFieldInvalid(loginForm, 'password', loginSubmitted)">
-              <ion-icon name="lock-closed-outline" class="input-icon" aria-hidden="true"></ion-icon>
-              <ion-input
-                id="login-password"
-                [type]="showLoginPassword ? 'text' : 'password'"
-                formControlName="password"
-                placeholder="Enter your password"
-                autocomplete="current-password"
-                class="standalone-input">
-              </ion-input>
-              <!-- Password Toggle Button -->
-              <button
-                type="button"
-                class="visibility-toggle-btn"
-                (click)="toggleLoginPassword()"
-                [attr.aria-label]="showLoginPassword ? 'Hide password' : 'Show password'">
-                <ion-icon
-                  [name]="showLoginPassword ? 'eye-off-outline' : 'eye-outline'"
-                  class="toggle-icon">
-                </ion-icon>
-              </button>
-            </div>
-            <!-- Validation Error Spans (No ion-text) -->
-            <span
-              class="validation-error"
-              *ngIf="isFieldInvalid(loginForm, 'password', loginSubmitted)">
-              <span *ngIf="loginForm.get('password')?.hasError('required')">Password is required.</span>
-              <span *ngIf="loginForm.get('password')?.hasError('minlength')">
-                Password must be at least 6 characters.
-              </span>
-            </span>
-          </div>
-
-          <!-- Remember Me & Forgot Password Row -->
-          <div class="form-options-row">
-            <ion-checkbox
-              formControlName="rememberMe"
-              class="vits-checkbox"
-              labelPlacement="end"
-              justify="start">
-              <span class="checkbox-text">Remember Me</span>
-            </ion-checkbox>
-
-            <button
-              type="button"
-              class="forgot-password-link"
-              (click)="onForgotPassword()">
-              Forgot Password?
-            </button>
-          </div>
-
-          <!-- Submit Button -->
-          <ion-button
-            type="submit"
-            expand="block"
-            class="submit-cta-btn"
-            [disabled]="isLoading">
-            <span *ngIf="!isLoading">Sign In to E-Sync</span>
-            <ion-spinner *ngIf="isLoading" name="crescent" color="light"></ion-spinner>
-          </ion-button>
-
-          <!-- Quick Test Accounts Helper -->
-          <div class="quick-credentials">
-            <span class="quick-label">Quick Testing:</span>
-            <button
-              type="button"
-              class="quick-pill admin-badge-pill"
-              (click)="fillTestingCredentials('admin')">
-              Admin: admin@vits.edu.ph
-            </button>
-            <button
-              type="button"
-              class="quick-pill student-badge-pill"
-              (click)="fillTestingCredentials('student')">
-              Student: student@vits.edu.ph
-            </button>
-          </div>
-
-          <!-- Footer Switch Link -->
-          <div class="form-footer-switch">
-            <span>New to ITlympics? </span>
-            <button
-              type="button"
-              class="inline-switch-btn"
-              (click)="switchSegment('signup')">
-              Register an account
-            </button>
-          </div>
-        </form>
+      <!-- Registration Header Title (Shown in Sign-Up Mode) -->
+      <div class="register-header" *ngIf="authMode === 'register'">
+        <button type="button" class="back-link-btn" (click)="setAuthMode('login')">
+          <ion-icon name="arrow-back-outline"></ion-icon>
+          <span>Back to Sign In</span>
+        </button>
+        <h2 class="register-card-title">Participant Registration</h2>
       </div>
 
-      <!-- SIGN UP VIEW -->
-      <div *ngIf="activeSegment === 'signup'" class="form-view signup-view">
-        <form [formGroup]="signUpForm" (ngSubmit)="onSignUp()" novalidate>
+      <!-- ================================================================ -->
+      <!-- LOGIN VIEW (Student or Admin) -->
+      <!-- ================================================================ -->
+      <form
+        *ngIf="authMode === 'login'"
+        [formGroup]="loginForm"
+        (ngSubmit)="onLogin()"
+        class="auth-form"
+        novalidate>
 
-          <!-- First Name & Last Name (Responsive Flex Row) -->
-          <div class="names-row">
-            <!-- First Name -->
-            <div class="form-group flex-1">
-              <label class="form-label" for="signup-firstname">First Name</label>
-              <div
-                class="input-surface"
-                [class.has-error]="isFieldInvalid(signUpForm, 'firstName', signUpSubmitted)">
-                <ion-icon name="person-outline" class="input-icon" aria-hidden="true"></ion-icon>
-                <ion-input
-                  id="signup-firstname"
-                  type="text"
-                  formControlName="firstName"
-                  placeholder="Juan"
-                  autocomplete="given-name"
-                  class="standalone-input">
-                </ion-input>
-              </div>
-              <span
-                class="validation-error"
-                *ngIf="isFieldInvalid(signUpForm, 'firstName', signUpSubmitted)">
-                <span *ngIf="signUpForm.get('firstName')?.hasError('required')">First name required.</span>
-                <span *ngIf="signUpForm.get('firstName')?.hasError('minlength')">Min 2 characters.</span>
-              </span>
-            </div>
-
-            <!-- Last Name -->
-            <div class="form-group flex-1">
-              <label class="form-label" for="signup-lastname">Last Name</label>
-              <div
-                class="input-surface"
-                [class.has-error]="isFieldInvalid(signUpForm, 'lastName', signUpSubmitted)">
-                <ion-icon name="person-outline" class="input-icon" aria-hidden="true"></ion-icon>
-                <ion-input
-                  id="signup-lastname"
-                  type="text"
-                  formControlName="lastName"
-                  placeholder="Dela Cruz"
-                  autocomplete="family-name"
-                  class="standalone-input">
-                </ion-input>
-              </div>
-              <span
-                class="validation-error"
-                *ngIf="isFieldInvalid(signUpForm, 'lastName', signUpSubmitted)">
-                <span *ngIf="signUpForm.get('lastName')?.hasError('required')">Last name required.</span>
-                <span *ngIf="signUpForm.get('lastName')?.hasError('minlength')">Min 2 characters.</span>
-              </span>
-            </div>
+        <!-- Identifier Input (Student ID / Email) -->
+        <div class="input-group">
+          <div
+            class="pill-input"
+            [class.pill-error]="isFieldInvalid(loginForm, 'identifier', loginSubmitted)">
+            <ion-icon
+              [name]="selectedRole === 'admin' ? 'mail-outline' : 'person-outline'"
+              class="pill-icon"
+              aria-hidden="true">
+            </ion-icon>
+            <ion-input
+              type="text"
+              formControlName="identifier"
+              [placeholder]="selectedRole === 'admin' ? 'admin@vits.edu.ph' : '20-xxxx or email'"
+              autocomplete="username"
+              class="inner-input">
+            </ion-input>
           </div>
+          <!-- Inline Validation Error (No ion-text) -->
+          <span
+            class="inline-error"
+            *ngIf="isFieldInvalid(loginForm, 'identifier', loginSubmitted)">
+            {{ selectedRole === 'admin' ? 'Admin email is required.' : 'Student ID or email is required.' }}
+          </span>
+        </div>
 
-          <!-- Email Field -->
-          <div class="form-group">
-            <label class="form-label" for="signup-email">Email Address</label>
-            <div
-              class="input-surface"
-              [class.has-error]="isFieldInvalid(signUpForm, 'email', signUpSubmitted)">
-              <ion-icon name="mail-outline" class="input-icon" aria-hidden="true"></ion-icon>
-              <ion-input
-                id="signup-email"
-                type="email"
-                formControlName="email"
-                placeholder="juan.delacruz@vits.edu.ph"
-                autocomplete="email"
-                class="standalone-input">
-              </ion-input>
-            </div>
-            <span
-              class="validation-error"
-              *ngIf="isFieldInvalid(signUpForm, 'email', signUpSubmitted)">
-              <span *ngIf="signUpForm.get('email')?.hasError('required')">Email is required.</span>
-              <span *ngIf="signUpForm.get('email')?.hasError('email')">Please enter a valid email address.</span>
-            </span>
-          </div>
-
-          <!-- Password Field -->
-          <div class="form-group">
-            <label class="form-label" for="signup-password">Set Password</label>
-            <div
-              class="input-surface"
-              [class.has-error]="isFieldInvalid(signUpForm, 'password', signUpSubmitted)">
-              <ion-icon name="lock-closed-outline" class="input-icon" aria-hidden="true"></ion-icon>
-              <ion-input
-                id="signup-password"
-                [type]="showSignUpPassword ? 'text' : 'password'"
-                formControlName="password"
-                placeholder="Min. 6 characters"
-                autocomplete="new-password"
-                class="standalone-input">
-              </ion-input>
-              <!-- Password Toggle Button -->
-              <button
-                type="button"
-                class="visibility-toggle-btn"
-                (click)="toggleSignUpPassword()"
-                [attr.aria-label]="showSignUpPassword ? 'Hide password' : 'Show password'">
-                <ion-icon
-                  [name]="showSignUpPassword ? 'eye-off-outline' : 'eye-outline'"
-                  class="toggle-icon">
-                </ion-icon>
-              </button>
-            </div>
-            <span
-              class="validation-error"
-              *ngIf="isFieldInvalid(signUpForm, 'password', signUpSubmitted)">
-              <span *ngIf="signUpForm.get('password')?.hasError('required')">Password is required.</span>
-              <span *ngIf="signUpForm.get('password')?.hasError('minlength')">
-                Password must be at least 6 characters.
-              </span>
-            </span>
-          </div>
-
-          <!-- Role Indicator Note -->
-          <div class="role-notice">
-            <ion-icon name="school-outline"></ion-icon>
-            <span>Public registration registers you as an <strong>ITlympics Student Participant</strong>.</span>
-          </div>
-
-          <!-- Submit Button -->
-          <ion-button
-            type="submit"
-            expand="block"
-            class="submit-cta-btn"
-            [disabled]="isLoading">
-            <span *ngIf="!isLoading">Complete Registration</span>
-            <ion-spinner *ngIf="isLoading" name="crescent" color="light"></ion-spinner>
-          </ion-button>
-
-          <!-- Footer Switch Link -->
-          <div class="form-footer-switch">
-            <span>Already registered? </span>
+        <!-- Password / PIN Input -->
+        <div class="input-group">
+          <div
+            class="pill-input"
+            [class.pill-error]="isFieldInvalid(loginForm, 'password', loginSubmitted)">
+            <ion-icon name="lock-closed-outline" class="pill-icon" aria-hidden="true"></ion-icon>
+            <ion-input
+              [type]="showLoginPassword ? 'text' : 'password'"
+              formControlName="password"
+              [placeholder]="selectedRole === 'admin' ? 'Enter admin password' : 'MM/DD/YYYY or password'"
+              autocomplete="current-password"
+              class="inner-input">
+            </ion-input>
             <button
               type="button"
-              class="inline-switch-btn"
-              (click)="switchSegment('login')">
-              Sign In
+              class="eye-btn"
+              (click)="toggleLoginPassword()"
+              [attr.aria-label]="showLoginPassword ? 'Hide password' : 'Show password'">
+              <ion-icon [name]="showLoginPassword ? 'eye-off-outline' : 'eye-outline'"></ion-icon>
             </button>
           </div>
-        </form>
-      </div>
+          <!-- Inline Validation Error (No ion-text) -->
+          <span
+            class="inline-error"
+            *ngIf="isFieldInvalid(loginForm, 'password', loginSubmitted)">
+            <span *ngIf="loginForm.get('password')?.hasError('required')">Password is required.</span>
+            <span *ngIf="loginForm.get('password')?.hasError('minlength')">Minimum 6 characters required.</span>
+          </span>
+        </div>
+
+        <!-- Primary Action Pill: Log In (width: 148px, height: 44px) -->
+        <button
+          type="submit"
+          class="primary-action-pill"
+          [disabled]="isLoading">
+          <span *ngIf="!isLoading">Log In</span>
+          <ion-spinner *ngIf="isLoading" name="crescent" class="btn-spinner"></ion-spinner>
+        </button>
+
+        <!-- Bottom Mode Switch Link (Hidden for Admin) -->
+        <div class="toggle-link-row" *ngIf="selectedRole === 'student'">
+          <button
+            type="button"
+            class="text-link-btn"
+            (click)="setAuthMode('register')">
+            New participant? <strong>Register for ITlympics</strong>
+          </button>
+        </div>
+      </form>
+
+      <!-- ================================================================ -->
+      <!-- STUDENT SIGN-UP VIEW -->
+      <!-- ================================================================ -->
+      <form
+        *ngIf="authMode === 'register'"
+        [formGroup]="signUpForm"
+        (ngSubmit)="onSignUp()"
+        class="auth-form"
+        novalidate>
+
+        <!-- First Name -->
+        <div class="input-group">
+          <div
+            class="pill-input"
+            [class.pill-error]="isFieldInvalid(signUpForm, 'firstName', signUpSubmitted)">
+            <ion-icon name="person-outline" class="pill-icon"></ion-icon>
+            <ion-input
+              type="text"
+              formControlName="firstName"
+              placeholder="First Name"
+              class="inner-input">
+            </ion-input>
+          </div>
+          <span
+            class="inline-error"
+            *ngIf="isFieldInvalid(signUpForm, 'firstName', signUpSubmitted)">
+            First name is required.
+          </span>
+        </div>
+
+        <!-- Last Name -->
+        <div class="input-group">
+          <div
+            class="pill-input"
+            [class.pill-error]="isFieldInvalid(signUpForm, 'lastName', signUpSubmitted)">
+            <ion-icon name="person-outline" class="pill-icon"></ion-icon>
+            <ion-input
+              type="text"
+              formControlName="lastName"
+              placeholder="Last Name"
+              class="inner-input">
+            </ion-input>
+          </div>
+          <span
+            class="inline-error"
+            *ngIf="isFieldInvalid(signUpForm, 'lastName', signUpSubmitted)">
+            Last name is required.
+          </span>
+        </div>
+
+        <!-- Student Number (20-xxxx) -->
+        <div class="input-group">
+          <div
+            class="pill-input"
+            [class.pill-error]="isFieldInvalid(signUpForm, 'studentNumber', signUpSubmitted)">
+            <ion-icon name="card-outline" class="pill-icon"></ion-icon>
+            <ion-input
+              type="text"
+              formControlName="studentNumber"
+              placeholder="Student Number (20-xxxx)"
+              class="inner-input">
+            </ion-input>
+          </div>
+          <span
+            class="inline-error"
+            *ngIf="isFieldInvalid(signUpForm, 'studentNumber', signUpSubmitted)">
+            Student Number is required.
+          </span>
+        </div>
+
+        <!-- Email Address -->
+        <div class="input-group">
+          <div
+            class="pill-input"
+            [class.pill-error]="isFieldInvalid(signUpForm, 'email', signUpSubmitted)">
+            <ion-icon name="mail-outline" class="pill-icon"></ion-icon>
+            <ion-input
+              type="email"
+              formControlName="email"
+              placeholder="student@vits.edu.ph"
+              class="inner-input">
+            </ion-input>
+          </div>
+          <span
+            class="inline-error"
+            *ngIf="isFieldInvalid(signUpForm, 'email', signUpSubmitted)">
+            Please provide a valid email address.
+          </span>
+        </div>
+
+        <!-- Set Password -->
+        <div class="input-group">
+          <div
+            class="pill-input"
+            [class.pill-error]="isFieldInvalid(signUpForm, 'password', signUpSubmitted)">
+            <ion-icon name="lock-closed-outline" class="pill-icon"></ion-icon>
+            <ion-input
+              [type]="showSignUpPassword ? 'text' : 'password'"
+              formControlName="password"
+              placeholder="Password (min. 6 characters)"
+              class="inner-input">
+            </ion-input>
+            <button
+              type="button"
+              class="eye-btn"
+              (click)="toggleSignUpPassword()"
+              [attr.aria-label]="showSignUpPassword ? 'Hide password' : 'Show password'">
+              <ion-icon [name]="showSignUpPassword ? 'eye-off-outline' : 'eye-outline'"></ion-icon>
+            </button>
+          </div>
+          <span
+            class="inline-error"
+            *ngIf="isFieldInvalid(signUpForm, 'password', signUpSubmitted)">
+            Password must be at least 6 characters.
+          </span>
+        </div>
+
+        <!-- Primary Action Pill: Register (width: 148px, height: 44px) -->
+        <button
+          type="submit"
+          class="primary-action-pill"
+          [disabled]="isLoading">
+          <span *ngIf="!isLoading">Register</span>
+          <ion-spinner *ngIf="isLoading" name="crescent" class="btn-spinner"></ion-spinner>
+        </button>
+
+        <!-- Back to Login Link -->
+        <div class="toggle-link-row">
+          <button
+            type="button"
+            class="text-link-btn"
+            (click)="setAuthMode('login')">
+            Already registered? <strong>Back to Sign In</strong>
+          </button>
+        </div>
+      </form>
 
     </div>
+
+    <!-- Quick Demo Accounts Trigger (For Seamless Evaluation) -->
+    <div class="quick-test-bar">
+      <span class="test-title">Quick Demo Credentials:</span>
+      <div class="test-pills">
+        <button type="button" class="test-pill" (click)="fillSampleStudent()">
+          Student: 20-1234
+        </button>
+        <button type="button" class="test-pill" (click)="fillSampleAdmin()">
+          Admin: admin@vits.edu.ph
+        </button>
+      </div>
+    </div>
+
   </div>
 </ion-content>
